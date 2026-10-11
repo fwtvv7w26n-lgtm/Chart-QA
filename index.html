@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Chart QA</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Chart QA">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#EDF6F3" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0A1513" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<style>
+:root { --bg:#EDF6F3; --surface:#FFFFFF; --fg:#0F201D; --muted:#587670; --line:#CCE0DB; --accent:#00796B; --ink:#FFFFFF; --warn:#C9323E; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0A1513; --surface:#12211E; --fg:#E2EFEC; --muted:#8AA8A1; --line:#27413C; --accent:#3FCBB6; --ink:#04201B; --warn:#FF8089; color-scheme: dark; } }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 18px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif; display: grid; place-items: center; padding: 24px; }
+.card { width: min(420px, 100%); background: var(--surface); border-radius: 24px; padding: 32px 28px; box-shadow: 0 6px 30px rgba(10,40,34,.12); text-align: center; }
+.logo { width: 64px; height: 64px; border-radius: 16px; margin: 0 auto 14px; display: block; }
+h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -.01em; }
+p { color: var(--muted); margin: 0 0 20px; font-size: 16px; }
+input { width: 100%; height: 52px; border-radius: 26px; border: 1px solid var(--line); background: transparent; color: var(--fg); padding: 0 20px; font: inherit; text-align: center; letter-spacing: .06em; }
+input:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button { width: 100%; height: 52px; margin-top: 12px; border: 0; border-radius: 26px; background: var(--accent); color: var(--ink); font: inherit; font-weight: 700; cursor: pointer; }
+.err { color: var(--warn); min-height: 1.5em; margin: 10px 0 0; font-size: 15px; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main class="card">
+  <img class="logo" src="icons/icon-192.png" alt="">
+  <h1>Chart QA</h1>
+  <p id="msg">Loading…</p>
+  <form id="f" hidden>
+    <input id="pw" type="password" autocomplete="current-password" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Passcode" aria-label="Passcode">
+    <button type="submit">Open</button>
+    <div class="err" id="err" role="alert"></div>
+  </form>
+</main>
+<script>
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var K = "chartqa-key";
+  if ("serviceWorker" in navigator) { navigator.serviceWorker.register("sw.js").catch(function () {}); }
+  var b64 = function (s) { var b = atob(s), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; };
+  var toB64 = function (a) { var s = ""; a.forEach(function (x) { s += String.fromCharCode(x); }); return btoa(s); };
+  var pack = null;
+  function decrypt(raw) {
+    return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, ["decrypt"]).then(function (key) {
+      return crypto.subtle.decrypt({ name: "AES-GCM", iv: b64(pack.iv) }, key, b64(pack.data));
+    }).then(function (buf) { return new TextDecoder().decode(buf); });
+  }
+  function show(html) { document.open(); document.write(html); document.close(); }
+  function ask(note) {
+    $("#msg").textContent = note || "Enter the passcode once on this device.";
+    $("#f").hidden = false; $("#pw").focus();
+  }
+  fetch("app.enc", { cache: "no-store" }).then(function (r) { if (!r.ok) throw 0; return r.json(); }).then(function (p) {
+    pack = p;
+    var saved = null; try { saved = localStorage.getItem(K); } catch (e) {}
+    if (!saved) return ask();
+    return decrypt(b64(saved)).then(show).catch(function () { try { localStorage.removeItem(K); } catch (e) {} ask("Passcode changed. Enter the new one."); });
+  }).catch(function () { $("#msg").textContent = "Can't load the app. Check the connection and reopen."; });
+  $("#f").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var pw = $("#pw").value.trim(); if (!pw) return;
+    $("#err").textContent = ""; $("#msg").textContent = "Unlocking…";
+    crypto.subtle.importKey("raw", new TextEncoder().encode(pw), "PBKDF2", false, ["deriveBits"]).then(function (base) {
+      return crypto.subtle.deriveBits({ name: "PBKDF2", salt: b64(pack.salt), iterations: pack.iter, hash: "SHA-256" }, base, 256);
+    }).then(function (bits) {
+      var raw = new Uint8Array(bits);
+      return decrypt(raw).then(function (html) { try { localStorage.setItem(K, toB64(raw)); } catch (x) {} show(html); });
+    }).catch(function () { $("#msg").textContent = "Enter the passcode once on this device."; $("#err").textContent = "Wrong passcode."; });
+  });
+})();
+</script>
+</body>
+</html>
