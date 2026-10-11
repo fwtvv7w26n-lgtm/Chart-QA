@@ -1,6 +1,6 @@
 /* Chart QA 서비스 워커: 네트워크 우선(새로고침·앱을 열 때 최신), 인터넷이 없으면 저장본. 아이콘만 저장본 우선 */
-const CACHE = "chartqa-v7";
-const SHELL = ["./", "index.html", "app.enc", "manifest.webmanifest", "icons/icon-192.png", "icons/icon-512.png", "icons/apple-touch-icon.png"];
+const CACHE = "chartqa-v8";
+const SHELL = ["./", "index.html", "app.enc", "manifest.webmanifest", "icons/icon-192-150643.png", "icons/icon-512-d7436b.png", "icons/apple-touch-icon-8e45be.png"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });
